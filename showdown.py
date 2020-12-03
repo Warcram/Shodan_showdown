@@ -121,9 +121,9 @@ class Scan():
 
 	def run(self):
 		if self.ip_range == "0.0.0.0/0":
-			print("!!WARNING!!!!WARNING!!!!WARNING!!!!WARNING!!!!WARNING!!!!WARNING!!!!WARNING!!!!WARNING!!!!WARNING!!")
+			print("\033[91m!!WARNING!!!!WARNING!!!!WARNING!!!!WARNING!!!!WARNING!!!!WARNING!!!!WARNING!!!!WARNING!!!!WARNING!!\033[0m")
 			print("You are about to scan the entire internet randomly; please proceed with the necessary caution.")
-			print("!!WARNING!!!!WARNING!!!!WARNING!!!!WARNING!!!!WARNING!!!!WARNING!!!!WARNING!!!!WARNING!!!!WARNING!!")
+			print("\033[91m!!WARNING!!!!WARNING!!!!WARNING!!!!WARNING!!!!WARNING!!!!WARNING!!!!WARNING!!!!WARNING!!!!WARNING!!\033[0m")
 			res = "N"
 			res = input("Are you sure you want to continue? (y/N) ").strip()
 			if res == "Y" or res == "y":
