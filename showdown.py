@@ -240,6 +240,33 @@ def print_grab_results(options):
 					print(full_url)
 
 
+def generate_json():
+	with open("results.txt", "r") as f:
+		zmap_data = f.readlines()
+	with open("grab_results.txt", "r") as f:
+		content = f.readlines()
+		zgrab_data = []
+		for item in content:
+			zgrab_data.append(json.loads(item))
+
+
+	headers = zmap_data[0].split(",")
+	zmap_data = zmap_data[1::]
+	output = {}
+
+	print_data = []
+	for item in range(0,len(zmap_data)):
+		print_data.append(zmap_data[item].split(","))
+
+	service = list(zgrab_data[0]["data"].keys())[0]
+	for x in range(0,len(headers)):
+		for y in range(0,len(zmap_data)):			
+			output[print_data[y][0].strip()] = {headers[x].strip(): print_data[y][x].strip()}
+			#if zgrab_data[y]["ip"] == print_data[y][0]:
+			#	output[print_data[y][0]]["data"] = zgrab_data[y]["data"][service]["result"]["response"]["body"]
+	return output
+
+
 def print_help(startup):
 	if startup:
 		print("GoScan.py!\nType help if you.... need help?")
@@ -292,6 +319,16 @@ class Go_Scan_Shell(cmd.Cmd):
 					print_grab_results(10)
 		else:
 			print_help(False)
+
+
+	def do_push(self, variable):
+		headers = {"User-Agent":"Mozilla/5.0 (Windows NT x.y; Win64; x64; rv:10.0) Gecko/41.0 Firefox/41.0",
+				   "Content-Type": "application/json"}
+		data = generate_json()
+		print(data)
+		resp = requests.post("http://192.168.0.21:5044", proxies={"http":"http://localhost:8080"}, headers=headers, data=data)
+		if resp == None:
+			pass
 
 
 	def do_grab(self, variable):
