@@ -35,6 +35,8 @@ mappings = {
 	995: "pop3s",
 	1723: "pptp",
 	3389: "rdp",
+	5601: "http",
+	8000: "http",
 	8080: "http"
 }
 
@@ -240,6 +242,10 @@ def print_grab_results(options):
 					print(full_url)
 
 
+def annotate_data():
+	os.system("cat justips.txt | ./zannotate --geoip2 --geoip2-database=GeoLite2-City.mmdb > annotated_ips.txt")
+
+
 def generate_json():
 	with open("results.txt", "r") as f:
 		zmap_data = f.readlines()
@@ -249,6 +255,11 @@ def generate_json():
 		for item in content:
 			zgrab_data.append(json.loads(item))
 
+	with open("annotated_ips.txt", "r") as f:
+		content = f.readlines()
+		geodata = []	
+		for item in content:
+			geodata.append(json.loads(item))
 
 	headers = zmap_data[0].split(",")
 	zmap_data = zmap_data[1::]
@@ -258,14 +269,40 @@ def generate_json():
 	for item in range(0,len(zmap_data)):
 		print_data.append(zmap_data[item].split(","))
 
+
 	service = list(zgrab_data[0]["data"].keys())[0]
 	for x in range(0,len(headers)):
 		for y in range(0,len(zmap_data)):			
 			output[print_data[y][0].strip()] = {headers[x].strip(): print_data[y][x].strip()}
-			#if zgrab_data[y]["ip"] == print_data[y][0]:
-			#	output[print_data[y][0]]["data"] = zgrab_data[y]["data"][service]["result"]["response"]["body"]
+			
+			#print("| " + zgrab_data[y]["ip"] + "| " + print_data[y][0])
+			if zgrab_data[y]["ip"] == print_data[y][0]:
+				try:
+					body = zgrab_data[y]["data"][service]["result"]["response"]["body"]
+					#print(body)
+					output[print_data[y][0]]["data"] = body
+				except KeyError as e:
+					output[print_data[y][0]]["data"] = "No response"
+		for y in range(0,len(geodata)):
+			if print_data[y][0] == geodata[y]["ip"]:
+				output[print_data[y][0]]["geo"] = geodata[y]["geoip2"]
+	
+
+	#print(f"OUTPUT:{output}")
 	return output
 
+
+def push_to_elk():
+	headers = {"User-Agent":"Mozilla/5.0 (Windows NT x.y; Win64; x64; rv:10.0) Gecko/41.0 Firefox/41.0",
+				   "Content-Type": "application/json"}
+	annotate_data()
+	data = generate_json()
+	#print(f"DATA:{data}")
+	with open("output.txt", "w+") as f:
+		f.write(json.dumps(data))
+	resp = requests.post("http://192.168.0.21:5044", headers=headers, data=json.dumps(data))
+	if resp == None:
+		pass
 
 def print_help(startup):
 	if startup:
@@ -322,13 +359,7 @@ class Go_Scan_Shell(cmd.Cmd):
 
 
 	def do_push(self, variable):
-		headers = {"User-Agent":"Mozilla/5.0 (Windows NT x.y; Win64; x64; rv:10.0) Gecko/41.0 Firefox/41.0",
-				   "Content-Type": "application/json"}
-		data = generate_json()
-		print(data)
-		resp = requests.post("http://192.168.0.21:5044", proxies={"http":"http://localhost:8080"}, headers=headers, data=data)
-		if resp == None:
-			pass
+		push_to_elk()
 
 
 	def do_grab(self, variable):
