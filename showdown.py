@@ -1,4 +1,4 @@
-p### To-Do list
+### To-Do list
 ### - Import data into Elasticsearch - DONE
 ### - Annotate and enhance data with Logstash; or annotate with ZAnnotate and push to ELK - DONE
 ### - Look to implement Python CLI Library - DONE
@@ -293,11 +293,11 @@ def generate_json():
 		for item in content:
 			zgrab_data.append(json.loads(item))
 
-	with open("annotated_ips.txt", "r") as f:
-		content = f.readlines()
-		geodata = []	
-		for item in content:
-			geodata.append(json.loads(item))
+	# with open("annotated_ips.txt", "r") as f:
+	# 	content = f.readlines()
+	# 	geodata = []	
+	# 	for item in content:
+	# 		geodata.append(json.loads(item))
 
 	headers = zmap_data[0].split(",")
 	zmap_data = zmap_data[1::]
@@ -330,22 +330,6 @@ def clear_file(filename):
 		f.write("")
 
 
-def push_to_elk():
-	headers = {"User-Agent":"Mozilla/5.0 (Windows NT x.y; Win64; x64; rv:10.0) Gecko/41.0 Firefox/41.0",
-				   "Content-Type": "application/json"}
-	#annotate_data()
-	data = generate_json()
-	#print(f"DATA:{data}")
-	clear_file("output.txt")
-	for item in data:
-		with open("output.txt", "a+") as f:
-			f.write(json.dumps(item))
-	resp = requests.post("http://192.168.0.21:5044", headers=headers, data=json.dumps(data))
-	if resp.status_code == 200:
-		print("Success!")
-	else:
-		print(f"Failed with error code {resp.status_code}")
-
 def print_help(startup):
 	if startup:
 		print("GoScan.py!\nType help if you.... need help?")
@@ -368,6 +352,58 @@ def print_help(startup):
 		\n\npush command:\
 		\npush\t\t\t\tPush most recent scans to ELK")
 
+def validate_int(num):
+	try:
+		number = int(num)
+		return True
+	except ValueError as e:
+		return False
+
+
+
+class ELK_Instance():
+	def __init__(self):
+		self.port = "5044"
+		self.url = "http://192.168.1.242"
+
+	def print_config(self):
+		print(f"Logstash URL:\t| {self.url}")
+		print(f"Logstash Port:\t| {self.port}")
+
+	def get_full_url(self):
+		return f"{self.url}:{self.port}"
+
+	def set_url(self,new_url):
+		valid_ip_regex = re.compile("^(([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\.){3}([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])$")
+
+		if new_url[0:7] == "http://" or new_url[0:8] == "https://": ### Checking to see if http protocol is at start of string
+			new_str = new_url
+		else:
+			new_str = "http://" + new_url
+		if valid_ip_regex.match(new_str[7::]):
+			print(f"\033[93mLogstash URL set to {new_str}\033[0m")
+			self.url = new_str
+		else:
+			print(f"\033[91mValidation failure for {new_url}.\033[0m")
+
+	def set_port(self, new_port):
+		if validate_int(new_port):
+			print(f"\033[93mLogstash port set to {new_port}\033[0m")
+			self.port = new_port
+		else:
+			print("\033[91mInvalid integer, try again\033[0m")
+
+	def push(self):
+		headers = {"User-Agent":"Mozilla/5.0 (Windows NT x.y; Win64; x64; rv:10.0) Gecko/41.0 Firefox/41.0",
+				   "Content-Type": "application/json"}
+		data = generate_json()
+		with open("output.txt", "w+") as f:
+			f.write(json.dumps(data))
+		resp = requests.post(f"{self.get_full_url()}", headers=headers, data=json.dumps(data))
+		if resp == None:
+			pass
+
+
 class Go_Scan_Shell(cmd.Cmd):
 	intro = print_help(True)
 	prompt = ">> "
@@ -376,35 +412,21 @@ class Go_Scan_Shell(cmd.Cmd):
 		super(Go_Scan_Shell, self).__init__()
 		self.scan = Scan(args)
 		self.grab = BannerGrab(args)
+		self.elk = ELK_Instance()
 		self.output = ""
 
 	def do_help(self,line):
 		print_help(False)
 
 	def do_set(self, variable):
-		self.scan.update_config(variable.split())
+		args = variable.split()
+		if args[0] == "url":
+			self.elk.set_url(args[1])
+		elif args[0] == "elk_port":
+			self.elk.set_port(args[1])
+		else:
+			self.scan.update_config(variable.split())
 
-	# def do_pipe(self, args):
-	# 	buffer = None
-	# 	for arg in args:
-	# 		s = arg
-	# 		if buffer:
-	# 			s += ' ' + buffer
-	# 		self.onecmd(s)
-	# 		buffer = self.output
-
-
-	# def postcmd(self, stop, line):
-	# 	if hasattr(self, 'output') and self.output:
-	# 		print_switch(self.output)
-	# 		self.output = None
-	# 	return stop
-
-	# def precmd(self, line):
-	# 	if "|" in line:
-	# 		print_switch(line.replace("|","pipe"))
-	# 		return line.replace("|","pipe")
-	# 	return line
 
 	def do_show(self, variable):
 		args = variable.split()
@@ -428,12 +450,8 @@ class Go_Scan_Shell(cmd.Cmd):
 			print_help(False)
 
 
-	def do_grep(self, var):
-		os.system(f"grep {var}")
-
-
 	def do_push(self, variable):
-		push_to_elk()
+		self.elk.push()
 
 	def do_grab(self, variable):
 		self.grab.run()
