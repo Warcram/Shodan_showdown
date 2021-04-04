@@ -434,23 +434,25 @@ class Go_Scan_Shell(cmd.Cmd):
 		self.elk = ELK_Instance()
 		self.output = ""
 
-	def help_clear(self,line):
+	def help_clear(self):
 		print("Clear terminal screen")
 
-	def help_exit(self,line):
+	def help_exit(self):
 		print("Exits application cleanly")
 
-	def help_grab(self,line):
+	def help_grab(self):
 		print("Runs ZGrab using the settings from the latest ZMap scan from the run command.")
 
-	def help_ls(self,line):
+	def help_ls(self):
 		print("Prints the contents of the current working directory")
 
-	def help_push(self,line):
+	def help_push(self):
 		print("Pushes the latest results from ZMap to your configured Logstash Instance. Can be configured with the set command")
+		self.elk.print_config()
 
-	def help_run(self,line):
+	def help_run(self):
 		print("Runs a ZMap scan with the current configuration. You can show this configuration with \"show conf\" command")
+		self.scan.print_config()
 
 	def help_set(self):
 		print("Configure number of settings listed below:\n")
@@ -464,6 +466,16 @@ class Go_Scan_Shell(cmd.Cmd):
 		print_title("ELK Configuration")
 		print("set url <HOSTNAME_OR_IP>\tSet Logstash URL not including port number")
 		print("set elk_port 0-65535\t\tSet Logtash port number to send data to")
+
+	def help_show(self):
+		print("The show command can be used to display results, configurations and outputs from the ZMap and ZGrab applications.")
+		print_title("Configurations")
+		print("show conf[ig] - Display current configuration for both scans and ELK configurations")
+		print("show opt[ions] - Display current configuration for both scans and ELK configurations")
+		print_title("Results")
+		print("show res[ults] [x] - Lists the responses of up to 10 results by default. This limit can be modified by appending the number of results to return")
+		print("show grab [x] - Shows up to 10 results from the latest ZGrab scan. The limit can be modified by appending the number of results to return")
+
 
 	def do_test(self, variable):
 		pass
