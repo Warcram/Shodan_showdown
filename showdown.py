@@ -19,6 +19,7 @@ import json
 import argparse
 import re
 from datetime import datetime
+from math import floor
 
 mappings = {
 	#PORT: SERVICE
@@ -45,6 +46,20 @@ mappings = {
 }
 
 LOG=False
+
+
+def print_title(txt, max=None):
+	if max:
+		mx = max
+	mx = 75 # Max can be overriden when called, but will still be overwritten if the string is too long
+	str_len = len(txt)
+	if str_len > mx:
+		mx = str_len + 50	
+	rem = mx - (str_len + 6)  # +6 for extra characters in print string
+	ind_banner = floor(rem/ 2) + rem % 2 # Length of each individual banner excluding endpoints
+	x = "="*ind_banner # Bad variable name for shorter print string
+	print(f"\n|{x}| \033[1m{txt}\033[0m |{x}|") 
+
 
 class BannerGrab():
 	def __init__(self, args):
@@ -140,9 +155,9 @@ class Scan():
 
 	def run(self):
 		if self.ip_range == "0.0.0.0/0":
-			print("\033[91m!!WARNING!!!!WARNING!!!!WARNING!!!!WARNING!!!!WARNING!!!!WARNING!!!!WARNING!!!!WARNING!!!!WARNING!!\033[0m")
+			print_title("\033[91mWARNING\033[0m")
 			print("You are about to scan the entire internet randomly; please proceed with the necessary caution.")
-			print("\033[91m!!WARNING!!!!WARNING!!!!WARNING!!!!WARNING!!!!WARNING!!!!WARNING!!!!WARNING!!!!WARNING!!!!WARNING!!\033[0m")
+			print_title("\033[91mWARNING\033[0m")
 			res = "N"
 			res = input("Are you sure you want to continue? (y/N) ").strip()
 			if res == "Y" or res == "y":
@@ -158,6 +173,7 @@ class Scan():
 		return f"zmap -N {str(self.max_results)} -r {str(self.frequency)} -p {str(self.port)} -v {str(self.verbosity)} -o results.txt -w .wl.txt -f \"saddr,sport,classification,success\""
 
 	def print_config(self):
+		print_title("ZMap Config")
 		print(f"""Current scan config:\
 		\nPort:\t\t| {str(self.port)}\
 		\nIP Range:\t| {self.ip_range}\
@@ -352,21 +368,24 @@ def print_help(startup):
 		\n\npush command:\
 		\npush\t\t\t\tPush most recent scans to ELK")
 
-def validate_int(num):
+def validate_port(num):
 	try:
 		number = int(num)
-		return True
+		if number > 0 and number < 65534:
+			return True
+		else:
+			return False
 	except ValueError as e:
 		return False
-
 
 
 class ELK_Instance():
 	def __init__(self):
 		self.port = "5044"
-		self.url = "http://192.168.1.242"
+		self.url = "http://192.168.0.1"
 
 	def print_config(self):
+		print_title("ELK Config")
 		print(f"Logstash URL:\t| {self.url}")
 		print(f"Logstash Port:\t| {self.port}")
 
@@ -387,7 +406,7 @@ class ELK_Instance():
 			print(f"\033[91mValidation failure for {new_url}.\033[0m")
 
 	def set_port(self, new_port):
-		if validate_int(new_port):
+		if validate_port(new_port):
 			print(f"\033[93mLogstash port set to {new_port}\033[0m")
 			self.port = new_port
 		else:
@@ -415,8 +434,40 @@ class Go_Scan_Shell(cmd.Cmd):
 		self.elk = ELK_Instance()
 		self.output = ""
 
-	def do_help(self,line):
-		print_help(False)
+	def help_clear(self,line):
+		print("Clear terminal screen")
+
+	def help_exit(self,line):
+		print("Exits application cleanly")
+
+	def help_grab(self,line):
+		print("Runs ZGrab using the settings from the latest ZMap scan from the run command.")
+
+	def help_ls(self,line):
+		print("Prints the contents of the current working directory")
+
+	def help_push(self,line):
+		print("Pushes the latest results from ZMap to your configured Logstash Instance. Can be configured with the set command")
+
+	def help_run(self,line):
+		print("Runs a ZMap scan with the current configuration. You can show this configuration with \"show conf\" command")
+
+	def help_set(self):
+		print("Configure number of settings listed below:\n")
+		print_title("ZMap Configuration")
+		print("set port X\t\t\tSet port number you want to find\
+		\nset ip X.X.X.X\t\t\tSet specific IP address to scan\
+		\nset ip_range X.X.X.X/XX\t\tSet IP range using CIDR Notation\
+		\nset freq[uency] X\t\tSet frequency of requests per second\
+		\nset verb[osity] X\t\tSet verbosity level of zmap\
+		\nset max X\t\t\tSet max number of hosts to find in scan\n")
+		print_title("ELK Configuration")
+		print("set url <HOSTNAME_OR_IP>\tSet Logstash URL not including port number")
+		print("set elk_port 0-65535\t\tSet Logtash port number to send data to")
+
+	def do_test(self, variable):
+		pass
+		
 
 	def do_set(self, variable):
 		args = variable.split()
@@ -433,6 +484,7 @@ class Go_Scan_Shell(cmd.Cmd):
 		if len(args) > 0:
 			if args[0] == "conf" or args[0] == "config" or args[0] == "options" or args[0] == "opt":
 				self.scan.print_config()
+				self.elk.print_config()
 			elif args[0] == "results" or args[0] == "res":
 				if len(args) > 1:
 					print_results(args[1])
@@ -540,8 +592,6 @@ class ScriptHandler():
 		else:
 			print("Please specify type of scan")
 			exit(1)
-
-
 
 
 def parse_arg():
