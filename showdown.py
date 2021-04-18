@@ -10,6 +10,7 @@
 ### - Keyword search within banner grab and flag as suspicious
 ### - Create a way for showdown to be ran as a command rather than CLI - In Prog
 
+import csv
 import requests
 import os
 import argparse
@@ -21,31 +22,39 @@ import re
 from datetime import datetime
 from math import floor
 
-mappings = {
-	#PORT: SERVICE
-	21: "ftp",
-	22: "ssh",
-	23: "telnet",
-	25: "smtp",
-	53: "dns",
-	80: "http",
-	110: "pop3",
-	111: "rpcbind",
-	135: "msrpc",
-	139: "netbios-ssn",
-	143: "imap",
-	443: "https",
-	445: "microsoft-ds",
-	993: "imap",
-	995: "pop3s",
-	1723: "pptp",
-	3389: "rdp",
-	5601: "http",
-	8000: "http",
-	8080: "http"
-}
+
+def get_mappings():
+	with open("small_mappings.json","r",encoding='utf-8') as jsonf:
+		mappings = json.loads(jsonf.read())
+	return mappings
+
+mappings = get_mappings()
 
 LOG=False
+
+def update_mappings():
+	url = "https://www.iana.org/assignments/service-names-port-numbers/service-names-port-numbers.csv"
+	raw_csv = requests.get(url, allow_redirects=True)
+	with open("new_mappings_full.csv","w") as f:
+		content = raw_csv.content.decode('utf-8')
+		f.write(content)
+	print(content)
+	f.close()
+	data = {}
+	compressed_data = {}
+	with open("new_mappings_full.csv", encoding="utf-8") as csvf:
+		reader = csv.DictReader(csvf)
+		for rows in reader:
+			key = rows['Port Number']	
+			data[key] = rows
+			compressed_data[key] = rows["Service Name"]
+	with open("mappings.json", "w", encoding='utf-8') as jsonf:
+		all_data = json.dumps(data,indent=4)
+		jsonf.write(all_data)
+	with open("small_mappings.json","w", encoding='utf-8') as jsonf:
+		small_data = json.dumps(compressed_data, indent=4)
+		jsonf.write(small_data)
+		print(small_data)
 
 
 def print_title(txt, max=None):
@@ -58,7 +67,7 @@ def print_title(txt, max=None):
 	rem = mx - (str_len + 6)  # +6 for extra characters in print string
 	ind_banner = floor(rem/ 2) + rem % 2 # Length of each individual banner excluding endpoints
 	x = "="*ind_banner # Bad variable name for shorter print string
-	print(f"\n|{x}| \033[1m{txt}\033[0m |{x}|") 
+	print(f"\n|{x}| \033[1m{txt}\033[0m |{x}|\n") 
 
 
 class BannerGrab():
@@ -133,7 +142,7 @@ class Scan():
 				self.ip_range = crq[1]
 				self.write_to_whitelist()
 				print(f"IP Range set to {self.ip_range}")
-		elif crq[0] == "freque as f:ncy" or crq[0] == "freq":
+		elif crq[0] == "frequency" or crq[0] == "freq":
 			self.frequency = int(crq[1])
 			print(f"Frequency set to {str(self.frequency)}")
 		elif crq[0] == "max" or crq[0] == "max_results":
@@ -146,7 +155,7 @@ class Scan():
 			print("Invalid variable. Try again")
 
 	def get_service(self):
-		return mappings.get(int(self.port))
+		return mappings.get(self.port)
 
 	def write_to_whitelist(self):
 		with open(".wl.txt", "w+") as f:
@@ -170,7 +179,7 @@ class Scan():
 		return True
 
 	def get_command_string(self):
-		return f"zmap -N {str(self.max_results)} -r {str(self.frequency)} -p {str(self.port)} -v {str(self.verbosity)} -o results.txt -w .wl.txt -f \"saddr,sport,classification,success\""
+		return f"zmap -N {str(self.max_results)} -r {str(self.frequency)} -p {str(self.port)} -v {str(self.verbosity)} -o results.txt -w .wl.txt  -f \"saddr,sport,classification,success,ttl,timestamp-str\""
 
 	def print_config(self):
 		print_title("ZMap Config")
@@ -189,9 +198,11 @@ class Result():
 		self.sourceport = res[1]
 		self.classification = res[2]
 		self.success = res[3]
+		self.ttl = res[4]
+		self.timestamp = res[5].replace("T"," ")[:19]
 
 	def print_result(self):
-		print(f"{self.sourceaddr} \t{self.sourceport} \t{self.classification} \t\t{self.success}")
+		print(f"{self.sourceaddr} \t{self.sourceport} \t{self.classification} \t\t{self.success}\t{self.ttl}\t{self.timestamp}")
 
 def sanity_check():
 	if os.geteuid() != 0:
@@ -516,6 +527,9 @@ class Go_Scan_Shell(cmd.Cmd):
 
 	def do_push(self, variable):
 		self.elk.push()
+
+	def do_update(self, variable):
+		update_mappings()
 
 	def do_grab(self, variable):
 		self.grab.run()
