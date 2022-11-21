@@ -46,6 +46,8 @@ class BannerGrab():
 
 	def get_command_string(self):
 		print(f"Service: {self.service}")
+		if self.service == "https":
+			self.service = "http"
 		return (f"zgrab2 {self.service} -f justips.txt -o grab_results.txt")
 
 	def run(self):
@@ -154,7 +156,7 @@ class Result():
 		self.success = res[3]
 
 	def print_result(self):
-		print(f"{self.sourceaddr} \t{self.sourceport} \t{self.classification} \t\t{self.success}")
+		print(f"{self.sourceaddr}\t{self.sourceport} \t{self.classification} \t\t{self.success}")
 
 def sanity_check():
 	if os.geteuid() != 0:
@@ -179,29 +181,32 @@ def sanity_check():
 
 def print_results(num_to_show):
 	rows_to_display = 10
-	with open("results.txt", "r") as f:
-		content = f.readlines()
-	f.close()
-	if not content:
-		print("No results :( ")
-	else:
-		num_of_results = len(content) - 1
-		if int(num_to_show) > num_of_results:
-			rows_to_display = num_of_results
+	if "results.txt" in os.listdir("./"):
+		with open("results.txt", "r") as f:
+			content = f.readlines()
+		f.close()
+		if not content:
+			print("No results :( ")
 		else:
-			try:
-				rows_to_display = int(num_to_show.replace(" ",""))
-			except ValueError as e:
-				rows_to_display = 10
-		all_results = []
-		for row in range(0,rows_to_display + 1):
-			if not row:
-				headers = content[row].replace("\n","").split(",")
+			num_of_results = len(content) - 1
+			if int(num_to_show) > num_of_results:
+				rows_to_display = num_of_results
 			else:
-				all_results.append(Result(content[row].replace("\n","")))
-		print(headers[0] + '\t\t' + '\t'.join(headers[1::]))	
-		for result in all_results:
-			result.print_result()
+				try:
+					rows_to_display = int(num_to_show.replace(" ",""))
+				except ValueError as e:
+					rows_to_display = 10
+			all_results = []
+			for row in range(0,rows_to_display + 1):
+				if not row:
+					headers = content[row].replace("\n","").split(",")
+				else:
+					all_results.append(Result(content[row].replace("\n","")))
+			print(headers[0] + '\t\t' + '\t'.join(headers[1::]))	
+			for result in all_results:
+				result.print_result()
+	else:
+		print("No results to show at this time. Please run a scan to generate results.")
 
 
 def print_grab_results(options):
@@ -209,7 +214,6 @@ def print_grab_results(options):
 		os.mkdir("./results/")
 	with open("grab_results.txt") as f:
 		content = f.readlines() 
-	f.close()
 	parsed_content = []
 	for entry in content:
 		parsed_content.append(json.loads(entry))
@@ -230,13 +234,16 @@ def print_grab_results(options):
 						f.write(body)
 					full_url = f"file://{os.getcwd()}/results/{url['host']}.html" 
 					print(full_url)
-		elif protocol == "telnet" or protocol == "imap" or protocol == "smtp" or protocol == "ftp":
+		elif protocol == "telnet" or protocol == "imap" or protocol == "smtp" or protocol == "ftp" or protocol == "ssh":
 			if status == "success":
-				banner = result['data'][protocol]['result']['banner']
+				if protocol == "ssh":
+					banner = str(result['data'][protocol]['result']['server_id'])
+				else:
+					banner = result['data'][protocol]['result']['banner']
 				if banner != "":
-					with open(f"results/{ip}.html", "w+") as f:
+					with open(f"results/{ip}.{protocol}", "w+") as f:
 						f.write(banner)
-					full_url = f"file://{os.getcwd()}/results/{ip}.html"
+					full_url = f"file://{os.getcwd()}/results/{ip}.{protocol}"
 					print(full_url)
 
 
@@ -322,9 +329,7 @@ def main():
 		entry = 0
 		looper = Go_Scan_Shell()
 		looper.cmdloop()
-		while ret:
-			ret = show_menu(entry, new_scan, banner_grab)
-			entry += 1
+		
 	else:
 		return 0
 
