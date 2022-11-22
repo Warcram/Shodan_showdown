@@ -9,12 +9,16 @@
 ### - 
 ### - 
 
-import requests
 import os
 import argparse
+import requests
 import cmd
+import sys
 from shutil import which
 import json
+
+LOGSTASH_URL = "127.0.0.1"
+LOGSTASH_PORT = "8080"
 
 
 mappings = {
@@ -38,6 +42,7 @@ mappings = {
 	8080: "http"
 }
 
+bannerGrab_Blacklist = ['dns']
 
 class BannerGrab():
 	def __init__(self):
@@ -50,13 +55,28 @@ class BannerGrab():
 			self.service = "http"
 		return (f"zgrab2 {self.service} -f justips.txt -o grab_results.txt")
 
+	def submit_to_logstash(self, host, port):
+		headers = {"Content-Type": "application/json"}
+		for result in os.listdir('./results/'):
+			if ".new" not in result:
+				print(result)
+				with open(f"./results/{result}", "r") as f:
+					data = json.load(f)
+					response = requests.post(f"http://{host}:{port}", json=data, headers=headers)
+					print(response.content)
+
 	def run(self):
-		self.gen_just_ip_file()
-		self.get_service()
-		if self.service == "dns":
-			print(f"Cannot banner grab for {self.service}")
+		proceed = False
+		proceed = self.gen_just_ip_file()
+		if proceed:
+			self.get_service()
+			if self.service in bannerGrab_Blacklist:
+				print(f"Cannot banner grab for {self.service}")
+			else:
+				os.system(self.get_command_string())
+				print_grab_results(True)
 		else:
-			os.system(self.get_command_string())
+			print("Grab failed - check that there are results available from ZMap scan.")
 
 	def gen_just_ip_file(self):
 		if "results.txt" in os.listdir("./"):
@@ -65,7 +85,11 @@ class BannerGrab():
 			content = content[1::]
 			ips = []
 			formatted = content
-			self.port = int(formatted[0].split(",")[1])
+			try:
+				self.port = int(formatted[0].split(",")[1])
+			except IndexError as e:
+				return False
+			
 			self.service = self.get_service()
 			for items in content:
 				row = items.split(",")
@@ -74,8 +98,10 @@ class BannerGrab():
 			with open("justips.txt", "w") as of:
 				of.writelines('\n'.join(ips))
 			of.close()
+			return True
 		else:
 			print("No ZMap results, default settings used.")
+			return False
 
 	def get_service(self):
 		self.service = mappings.get(self.port)
@@ -242,6 +268,7 @@ def print_grab_results(options):
 					banner = result['data'][protocol]['result']['banner']
 				if banner != "":
 					with open(f"results/{ip}.{protocol}", "w+") as f:
+						banner = banner.replace('\'', '\"')
 						f.write(banner)
 					full_url = f"file://{os.getcwd()}/results/{ip}.{protocol}"
 					print(full_url)
@@ -304,7 +331,7 @@ class Go_Scan_Shell(cmd.Cmd):
 	def do_grab(self, variable):
 		self.grab.run()
 
-	def do_clear(self, varilable):
+	def do_clear(self, variable):
 		os.system("clear")
 
 	def do_ls(self, variable):
@@ -319,20 +346,74 @@ class Go_Scan_Shell(cmd.Cmd):
 	def do_grab(self, line):
 		self.grab.run()
 
+def check_for_shell(arguments):
+	if "-ip" in arguments or "-p" in arguments:
+		return False
+	else:
+		return True
+
+def parse_args(args):
+	parser = argparse.ArgumentParser(
+		prog='ShodanShowdown',
+		description='An application for running internet scans on specific ranges and ports. Can be used to grab banners.',
+	)
+	parser.add_argument('-ip', '--ip')
+	parser.add_argument('-p', '--port')
+	parser.add_argument('-f', '--frequency')
+	parser.add_argument('-m', '--max')
+	parser.add_argument('-v', '--verbose')
+	parser.add_argument('-g', '--grab', action='store_true')
+	parser.add_argument('-ips', '--iplist')
+	parser.add_argument('-s', '--submit', action='store_true')
+	args = parser.parse_args()
+	return args
+
+def configure_scan(scan, banner, args):
+	args = parse_args(args)
+	if args.ip is not None:
+		scan.ip_range = args.ip
+	if args.port is not None:
+		scan.port = args.port
+		banner.port = args.port
+	if args.frequency is not None:
+		scan.frequency = args.frequency
+	if args.max is not None:
+		scan.max = args.max
+	if args.iplist is None:
+		scan.run()
+		if args.grab:
+			banner.run()
+			if args.submit:
+				banner.submit_to_logstash(LOGSTASH_URL, LOGSTASH_PORT)
+	else:
+		with open(args.iplist) as f:
+			ip_list = f.readlines()
+		for ip_range in ip_list:
+			scan.ip_range = ip_range
+			scan.port = args.port
+			scan.run()
+			if args.grab:
+				banner.run()
+				if args.submit:
+					banner.submit_to_logstash(LOGSTASH_URL, LOGSTASH_PORT)
+	print("Complete.")
+
+
 
 def main():
 	proceed = sanity_check()
+	is_shell = check_for_shell(sys.argv)
+
 	if proceed:
-		new_scan = Scan()
-		banner_grab = BannerGrab()
-		ret = True
-		entry = 0
-		looper = Go_Scan_Shell()
-		looper.cmdloop()
-		
+		if is_shell:
+			looper = Go_Scan_Shell()
+			looper.cmdloop()
+		else:
+			new_scan = Scan()
+			banner_grab = BannerGrab()
+			configure_scan(new_scan, banner_grab, sys.argv)
 	else:
 		return 0
 
 if __name__ == "__main__":
 	main()
-
