@@ -58,12 +58,10 @@ class BannerGrab():
 	def submit_to_logstash(self, host, port):
 		headers = {"Content-Type": "application/json"}
 		for result in os.listdir('./results/'):
-			if ".new" not in result:
-				print(result)
-				with open(f"./results/{result}", "r") as f:
-					data = json.load(f)
-					response = requests.post(f"http://{host}:{port}", json=data, headers=headers)
-					print(response.content)
+			with open(f"./results/{result}", "r") as f:
+				data = json.load(f)
+				response = requests.post(f"http://{host}:{port}", json=data, headers=headers)
+				print(response.content)
 
 	def run(self):
 		proceed = False
